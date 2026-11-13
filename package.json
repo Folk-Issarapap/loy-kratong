@@ -1,0 +1,18 @@
+{
+  "name": "loy-kratong-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:room": "pnpm --filter @loy-kratong/room dev",
+    "dev:ingestor": "pnpm --filter @loy-kratong/ingestor dev",
+    "dev:web": "pnpm --filter @loy-kratong/web dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test:unit": "pnpm --filter @loy-kratong/ingestor exec tsx ../../test-system.ts",
+    "test:room": "pnpm --filter @loy-kratong/ingestor exec tsx ../../test-room-api.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
+

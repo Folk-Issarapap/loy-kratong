@@ -1,0 +1,21 @@
+{
+  "name": "@loy-kratong/ingestor",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "mock": "tsx src/mock.ts"
+  },
+  "dependencies": {
+    "@loy-kratong/shared": "workspace:*",
+    "dotenv": "^16.4.7",
+    "tiktok-live-connector": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
+
