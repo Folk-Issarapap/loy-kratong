@@ -49,6 +49,7 @@ export default function RiverPage() {
   const [totalLikes, setTotalLikes] = useState(0);
   const [recentGift, setRecentGift] = useState<{ name: string; text: string } | null>(null);
   const [mode, setMode] = useState<'live' | 'fallback'>('live');
+  const [recentWishes, setRecentWishes] = useState<KrathongEvent[]>([]);
 
   // Handle responsive scaling for desktop/browser preview vs OBS 1080x1920
   useEffect(() => {
@@ -291,22 +292,28 @@ export default function RiverPage() {
           const item = activeList[i];
           item.progress += item.speed * delta;
 
-          // Spawn at Y=1420 (above TikTok chat area), floats up to horizon Y=840
-          const startY = 1420;
-          const endY = 840;
+          // Stagger spawn Y by lane so they do not line up horizontally
+          const startY = 1440 + (item.lane % 3) * 40;
+          const endY = 830;
           const currentY = startY - (startY - endY) * item.progress;
 
           // 5 lanes across 1080 width: [180, 360, 540, 720, 900]
           const laneX = 180 + item.lane * 180;
-          const driftX = Math.sin(item.progress * 5 + item.driftOffset) * 25;
+          const driftX = Math.sin(item.progress * 5 + item.driftOffset) * 22;
 
           item.container.x = laneX + driftX;
           item.container.y = currentY;
 
-          // Perspective scaling & fading: 1.0 down to 0.42 near horizon
-          const scaleVal = 1.0 - item.progress * 0.58;
+          // Perspective scaling & fading: 1.0 down to 0.4 near horizon
+          const scaleVal = 1.0 - item.progress * 0.6;
           item.container.scale.set(scaleVal);
           item.container.alpha = item.progress > 0.85 ? (1 - item.progress) / 0.15 : 1;
+
+          // Fade out the name badge as krathong floats deeper into the river
+          const badge = item.container.getChildByLabel('badge');
+          if (badge) {
+            badge.alpha = item.progress > 0.35 ? Math.max(0, (0.65 - item.progress) / 0.3) : 1;
+          }
 
           // Remove when reaching horizon
           if (item.progress >= 1) {
@@ -468,34 +475,48 @@ export default function RiverPage() {
       const container = new PIXI.Container();
       const style = event.style || 'banana';
       const isGold = style === 'gold' || style === 'gold-aura';
+      const isLotus = style === 'lotus';
+      const isBread = style === 'bread';
 
       // 1. Krathong Visual Art
       const graphics = createKrathongGraphics(style);
       container.addChild(graphics);
 
-      // 2. Name & Wish Card (Floating above candle)
-      const labelText = event.text
-        ? `${event.user.name}: "${event.text}"`
-        : event.user.name;
+      // 2. Compact Glassmorphism Name Badge
+      const badgeContainer = new PIXI.Container();
+      badgeContainer.label = 'badge';
 
-      const text = new PIXI.Text({
-        text: labelText,
+      const iconPrefix = isGold ? '👑 ' : (isLotus ? '🪷 ' : (isBread ? '🍞 ' : '🌿 '));
+      const shortName = event.user.name.length > 12 ? event.user.name.slice(0, 12) + '..' : event.user.name;
+      const displayName = `${iconPrefix}${shortName}`;
+
+      const nameText = new PIXI.Text({
+        text: displayName,
         style: {
           fontFamily: 'Noto Sans Thai, sans-serif',
-          fontSize: isGold ? 26 : 22,
-          fill: isGold ? '#ffeb3b' : '#ffffff',
+          fontSize: isGold ? 22 : 18,
+          fill: isGold ? '#ffe600' : '#ffffff',
           fontWeight: 'bold',
-          dropShadow: {
-            alpha: 0.95,
-            blur: 5,
-            distance: 2,
-            color: '#000000',
-          },
         },
       });
-      text.anchor.set(0.5, 1);
-      text.y = -50;
-      container.addChild(text);
+      nameText.anchor.set(0.5, 0.5);
+
+      const badgeW = Math.max(80, nameText.width + 24);
+      const badgeH = 30;
+
+      const badgeBg = new PIXI.Graphics();
+      badgeBg.roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 15);
+      badgeBg.fill({ color: 0x050a18, alpha: 0.88 });
+      badgeBg.stroke({
+        width: 1.5,
+        color: isGold ? 0xffd700 : (isLotus ? 0xf472b6 : (isBread ? 0xd97706 : 0x22c55e)),
+        alpha: 0.9,
+      });
+
+      badgeContainer.addChild(badgeBg);
+      badgeContainer.addChild(nameText);
+      badgeContainer.y = -46;
+      container.addChild(badgeContainer);
 
       const lane = Math.floor(Math.random() * 5);
       const visualItem: VisualKrathong = {
@@ -504,7 +525,7 @@ export default function RiverPage() {
         event,
         lane,
         progress: 0,
-        speed: isGold ? 0.00024 : 0.00038,
+        speed: isGold ? 0.00022 : 0.00035,
         driftOffset: Math.random() * Math.PI * 2,
         isAmbient: false,
       };
@@ -548,10 +569,15 @@ export default function RiverPage() {
               for (const activeEvt of msg.active) {
                 spawnUserKrathong(activeEvt);
               }
+              const wishes = msg.active.filter(k => !!k.text).slice(-4).reverse();
+              setRecentWishes(wishes);
             }
           } else if (msg.type === 'krathong') {
             setTotalKrathongs((prev) => prev + 1);
             spawnUserKrathong(msg.event);
+            if (msg.event.text) {
+              setRecentWishes((prev) => [msg.event, ...prev.slice(0, 3)]);
+            }
             if (msg.event.kind === 'gift') {
               setRecentGift({
                 name: msg.event.user.name,
@@ -647,9 +673,63 @@ export default function RiverPage() {
           </div>
         )}
 
-        {/* Mid-screen Helper Banner (Just above bottom 35% chat zone) */}
-        <div className="absolute bottom-[36%] left-10 right-10 text-center pointer-events-none z-10">
-          <div className="inline-block px-8 py-3 rounded-full bg-slate-950/75 backdrop-blur-md border border-slate-700/60 text-slate-200 text-lg shadow-xl">
+        {/* Live Wish Stream Feed (Floating Card Stack on Left) */}
+        <div className="absolute top-[28%] left-10 w-[420px] space-y-3 pointer-events-none z-20">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/80 border border-amber-500/30 text-amber-300 text-xs shadow-lg backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-bold tracking-wide">สายธารคำอธิษฐานสด</span>
+          </div>
+
+          <div className="space-y-2.5">
+            {recentWishes.map((item, idx) => {
+              const isGold = item.style === 'gold' || item.style === 'gold-aura';
+              const isLotus = item.style === 'lotus';
+              const isBread = item.style === 'bread';
+
+              return (
+                <div
+                  key={item.id + idx}
+                  className={`p-3.5 rounded-2xl backdrop-blur-md border transition-all duration-300 shadow-xl ${
+                    isGold
+                      ? 'bg-gradient-to-r from-amber-950/85 via-slate-900/90 to-slate-950/90 border-amber-400/60 ring-1 ring-amber-400/40 text-amber-100'
+                      : isLotus
+                      ? 'bg-slate-950/85 border-pink-500/40 text-pink-100'
+                      : isBread
+                      ? 'bg-slate-950/85 border-amber-600/40 text-amber-100'
+                      : 'bg-slate-950/85 border-emerald-500/40 text-emerald-100'
+                  }`}
+                  style={{
+                    opacity: Math.max(0.2, 1 - idx * 0.22),
+                    transform: `scale(${1 - idx * 0.04})`,
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">
+                        {isGold ? '👑' : isLotus ? '🪷' : isBread ? '🍞' : '🌿'}
+                      </span>
+                      <span className="text-xs font-bold text-white tracking-wide">
+                        {item.user.name}
+                      </span>
+                    </div>
+                    {item.source === 'web' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                        เว็บ
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm font-medium text-slate-100 line-clamp-2 leading-snug drop-shadow-sm">
+                    "{item.text}"
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Riverbank Helper Banner (Anchored at the bottom dock above TikTok chat safe zone) */}
+        <div className="absolute bottom-[22%] left-10 right-10 text-center pointer-events-none z-10">
+          <div className="inline-block px-8 py-3 rounded-full bg-slate-950/85 backdrop-blur-md border border-amber-500/30 text-slate-200 text-lg shadow-2xl">
             พิมพ์คำอธิษฐานในแชต เช่น <span className="text-amber-300 font-bold">"ขอให้รวย #ดอกบัว"</span> เพื่อลอยกระทง
           </div>
         </div>
